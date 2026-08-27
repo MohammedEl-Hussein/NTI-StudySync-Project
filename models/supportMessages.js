@@ -15,16 +15,18 @@ const supportMessageSchema = new mongoose.Schema(
     subject: {
       type: String,
       required: true,
+      trim:true,
     },
 
     content: {
       type: String,
       required: true,
+      trim:true,
     },
 
     status: {
       type: String,
-      required: true,
+      enum:["pending","in_progress","resolved"],
       default: "pending",
     },
   },
