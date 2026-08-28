@@ -11,7 +11,7 @@ const roomMembersSchema = new mongoose.Schema({
         ref: "Room",
         required: true
     },
-    joindAt: {
+    joinedAt: {
         type: Date,
         default: Date.now
     }

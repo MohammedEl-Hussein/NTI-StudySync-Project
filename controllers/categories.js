@@ -39,13 +39,90 @@ const createCategory = async (req,res) => {
         })
     }
 };
-const getAllCategories = async (req,res) => {
-};
-const updateCategoryById = async (req,res) => {
-};
-const deleteCategoryById = async (req,res) => {
-};  
+const getAllCategories = async (req, res) => {
+    try {
+        const categories = await categoryModel.find();
 
+        return res.status(200).json({
+            message: "Categories retrieved successfully",
+            categories
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            message: err.message
+        });
+    }
+};
+const updateCategoryById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, description } = req.body;
+
+        const category = await categoryModel.findById(id);
+
+        if (!category) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        if (name) {
+            const categoryName = name.trim().toLowerCase();
+
+            const existCategory = await categoryModel.findOne({
+                name: categoryName,
+                _id: { $ne: id }
+            });
+
+            if (existCategory) {
+                return res.status(400).json({
+                    message: "Category already exists"
+                });
+            }
+
+            category.name = categoryName;
+        }
+
+        if (description !== null) {
+            category.description = description.trim();
+        }
+
+        await category.save();
+
+        return res.status(200).json({
+            message: "Category updated successfully",
+            category
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            message: err.message
+        });
+    }
+};
+const deleteCategoryById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const category = await categoryModel.findByIdAndDelete(id);
+
+        if (!category) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        return res.status(200).json({
+            message: "Category deleted successfully"
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            message: err.message
+        });
+    }
+};
 module.exports = {
     createCategory,
     getAllCategories,
