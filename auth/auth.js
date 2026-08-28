@@ -1,5 +1,5 @@
 const jwt=require("jsonwebtoken");
-const auth = async(res,req,next) => {
+const auth = async(req,res,next) => {
     const {authorization}=req.headers;
     if(!authorization){
         return res.status(401).json({
@@ -10,6 +10,7 @@ const auth = async(res,req,next) => {
         const token = authorization.split(" ")[1];
         const decode = jwt.verify(token,"this is my secret key");
         req.user = decode;
+        next()
     }catch (err){
         return res.status(401).json({
             message:"please login first"

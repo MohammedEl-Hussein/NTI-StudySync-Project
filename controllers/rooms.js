@@ -14,7 +14,8 @@ const createRoom = async (req, res) => {
             maxMembers,
             startDate,
             endDate,
-            meetingURL
+            meetingURL,
+            ownerId
         } = req.body;
 
         // Check required fields
@@ -39,7 +40,7 @@ const createRoom = async (req, res) => {
         }
 
         // The logged-in user becomes the owner
-        const ownerId = req.user.id;
+        // const ownerId = req.user.id;
 
         const room = await Room.create({
             title,
