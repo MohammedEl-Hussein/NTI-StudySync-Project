@@ -3,45 +3,100 @@ const roomModel = require("../models/rooms");
 const userModel = require("../models/users");
 
 
+// const joinRoom = async (req, res) => {
+//     try {
+//         const { roomId } = req.params;
+//         const userId = req.user._id;
+//         // Check if room exists
+//         const room = await roomModel.findById(roomId);
+//         if (!room) {
+//             return res.status(404).json({
+//                 message: "Room not found"
+//             });
+//         }
+//         // Check if user is already a member
+//         const existingMember = await roomMemberModel.findOne({
+//             userId,
+//             roomId
+//         });
+//         if (existingMember) {
+//             return res.status(400).json({
+//                 message: "You are already a member of this room"
+//             });
+//         }
+//         // Check room capacity
+//         const membersCount = await roomMemberModel.countDocuments({
+//             roomId
+//         });
+//         if (membersCount >= room.maxMembers) {
+//             return res.status(400).json({
+//                 message: "Room is full"
+//             });
+//         }
+//         // Create membership
+//         const roomMember = await roomMemberModel.create({
+//             userId,
+//             roomId
+//         });
+//         return res.status(201).json({
+//             message: "Joined room successfully",
+//             roomMember
+//         });
+//     } catch (err) {
+//         return res.status(500).json({
+//             message: err.message
+//         });
+//     }
+// };
 const joinRoom = async (req, res) => {
     try {
         const { roomId } = req.params;
-        const userId = req.user._id;
+
+        const userId = req.user.id;
+
         // Check if room exists
         const room = await roomModel.findById(roomId);
+
         if (!room) {
             return res.status(404).json({
                 message: "Room not found"
             });
         }
+
         // Check if user is already a member
         const existingMember = await roomMemberModel.findOne({
             userId,
             roomId
         });
+
         if (existingMember) {
             return res.status(400).json({
                 message: "You are already a member of this room"
             });
         }
+
         // Check room capacity
         const membersCount = await roomMemberModel.countDocuments({
             roomId
         });
+
         if (membersCount >= room.maxMembers) {
             return res.status(400).json({
                 message: "Room is full"
             });
         }
+
         // Create membership
         const roomMember = await roomMemberModel.create({
             userId,
             roomId
         });
+
         return res.status(201).json({
             message: "Joined room successfully",
             roomMember
         });
+
     } catch (err) {
         return res.status(500).json({
             message: err.message
@@ -75,7 +130,7 @@ const getRoomMembers = async (req, res) => {
 const leaveRoom = async (req, res) => {
     try {
         const { roomId } = req.params;
-        const userId = req.user._id;
+        const userId = req.user.id;
         // Check if user is the owner
         const room = await roomModel.findById(roomId);
         if (!room) {
@@ -111,7 +166,7 @@ const addMember = async (req, res) => {
     try {
         const { roomId } = req.params;
         const { userId } = req.body;
-        const requesterId = req.user._id;
+        const requesterId = req.user.id;
         // Check if userId was provided
         if (!userId) {
             return res.status(400).json({
@@ -185,7 +240,7 @@ const removeMember = async (req, res) => {
     try {
         const { roomId, userId } = req.params;
 
-        const requesterId = req.user._id;
+        const requesterId = req.user.id;
         // Check if room exists
         const room = await roomModel.findById(roomId);
         if (!room) {
