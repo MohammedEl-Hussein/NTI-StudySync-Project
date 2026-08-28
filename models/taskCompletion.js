@@ -23,8 +23,13 @@ timestamps:true // to update the date auto..
 
 });
 
-taskCompletionSchema.index( // make one user has one of this task 
-  { userId: 1, taskId: 1 },
+
+// make one user has one of this task & can't complete it twice
+// if a user completed this task, the other user can complete it too
+// make sure every user has own task completion for this task
+
+taskCompletionSchema.index( 
+  { userId: 1, taskId: 1 }, 
   { unique: true }
 );
 

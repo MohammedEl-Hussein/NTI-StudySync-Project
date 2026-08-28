@@ -8,15 +8,14 @@ const taskSchema= new mongoose.Schema({
     section: {type:String,required:true},// relationship ..&tasks
     title: {type:String,required:true},
     description: {type:String},
-    order: {type:Number,required:true},
+    order: {type:Number,required:true,min:1},// to know the order of this task in that section in that room 
     dueDate: {type:Date},
-
 },
   {
     timestamps:true // to update the date auto..
   });
 
-taskSchema.index({ roomId: 1, section: 1, order: 1 });
+taskSchema.index({ roomId: 1, section: 1, order: 1 },{unique:true});// to don't duplicate
 //this task in that order in that section in that room
 
 const taskModel = mongoose.model("Task",taskSchema)
