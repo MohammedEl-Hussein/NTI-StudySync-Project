@@ -8,7 +8,7 @@ const auth = async(req,res,next) => {
     }
     try{
         const token = authorization.split(" ")[1];
-        const decode = jwt.verify(token,"this is my secret key");
+        const decode = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decode;
         next()
     }catch (err){
