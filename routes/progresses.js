@@ -1,4 +1,5 @@
 const express = require("express");
+const auth = require("../auth/auth");
 
 const {
   createProgress,
@@ -10,17 +11,14 @@ const {
 
 const router = express.Router();
 
-router.post("/", createProgress);
+router.post("/", auth, createProgress);
 
-router.get("/", getAllProgresses);
+router.get("/", auth, getAllProgresses);
 
-router.get(
-  "/user/:userId/room/:roomId",
-  getUserRoomProgress
-);
+router.get("/room/:roomId", auth, getUserRoomProgress);
 
-router.put("/:id", updateProgress);
+router.put("/:id", auth, updateProgress);
 
-router.delete("/:id", deleteProgress);
+router.delete("/:id", auth, deleteProgress);
 
 module.exports = router;
