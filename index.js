@@ -20,8 +20,8 @@ const supportMessageRoutes = require("./routes/supportMessages");
 const roomMemberRoutes = require("./routes/roomMembers");
 const roomRoutes = require("./routes/rooms");
 // const supportMessageRoutes = require("./routes/supportMessages");
-// const taskCompletionRoutes = require("./routes/taskCompletion");
-// const taskRoutes = require("./routes/tasks");
+const taskCompletionRoutes = require("./routes/taskCompletion");
+const taskRoutes = require("./routes/tasks");
 app.use("/users", userRoutes);
 app.use("/categories", categoryRoutes);
 // app.use("/chats", chatRoutes);
@@ -35,8 +35,8 @@ app.use("/supportMessages", supportMessageRoutes);
 app.use("/room-members", roomMemberRoutes);
 app.use("/rooms", roomRoutes);
 // app.use("/support-messages", supportMessageRoutes);
-// app.use("/task-completion", taskCompletionRoutes);
-// app.use("/tasks", taskRoutes);
+app.use("/task-completion", taskCompletionRoutes);
+app.use("/tasks", taskRoutes);
 
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {

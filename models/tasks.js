@@ -1,22 +1,53 @@
-const mongoose=require("mongoose")
-const taskSchema= new mongoose.Schema({
-    roomId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Room",
-        required: true
-    }, // relationship room&tasks
-    section: {type:String,required:true},// relationship ..&tasks
-    title: {type:String,required:true},
-    description: {type:String},
-    order: {type:Number,required:true,min:1},// to know the order of this task in that section in that room 
-    dueDate: {type:Date},
-},
+const mongoose = require("mongoose");
+
+const taskSchema = new mongoose.Schema(
   {
-    timestamps:true // to update the date auto..
-  });
+    roomId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Room",
+      required: true
+    },
 
-taskSchema.index({ roomId: 1, section: 1, order: 1 },{unique:true});// to don't duplicate
-//this task in that order in that section in that room
+    section: {
+      type: String,
+      required: true
+    },
 
-const taskModel = mongoose.model("Task",taskSchema)
+    title: {
+      type: String,
+      required: true
+    },
+
+    description: {
+      type: String
+    },
+
+    order: {
+      type: Number,
+      required: true,
+      min: 1
+    },
+
+    dueDate: {
+      type: Date
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+
+taskSchema.index(
+  {
+    roomId: 1,
+    section: 1,
+    order: 1
+  },
+  {
+    unique: true
+  }
+);
+
+const taskModel = mongoose.model("Task", taskSchema);
+
 module.exports = taskModel;
