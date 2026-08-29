@@ -29,7 +29,10 @@ const login = async (req, res) => {
     }
     // genete token
     const token = jwt.sign(
-      { id: user._id.toString(),uname: user.userName, email: user.email ,role:user.role},
+      { id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role:user.role},
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
     );
