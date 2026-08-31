@@ -1,10 +1,15 @@
 const userModel = require("../models/users");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+
 // crud operation
 const createUser = async (req, res) => {
   try {
     const newUser = req.body;
+    const existingUser = await userModel.findOne({ email: newUser.email });
+    if (existingUser) {
+      return res.status(400).json({ message: "email already exists" });
+    }
     const user = await userModel.create(newUser);
     res.status(201).json({ message: "user created", data: user });
   } catch (err) {
@@ -44,6 +49,9 @@ const login = async (req, res) => {
 };
 const getAllUsers = async(req,res)=>{
     try{
+        if(req.user.role !== "admin"){
+            return res.status(403).json({ message: "access denied" });
+        }
         const users = await userModel.find();
         res.status(200).json({
             message: "users retrieved",
@@ -56,9 +64,15 @@ const getAllUsers = async(req,res)=>{
     }
 }
 const getUserById = async(req,res)=>{
-        try{
+    try{
+        if(req.user.id !== req.params.id && req.user.role !== "admin"){
+            return res.status(403).json({ message: "access denied" });
+        }
         const users = await userModel.findById(req.params.id);
-            res.status(200).json({
+        if(!users){
+            return res.status(404).json({ message: "user not found" });
+        }
+        res.status(200).json({
             message: "users retrieved",
             data:users
         });
@@ -70,7 +84,16 @@ const getUserById = async(req,res)=>{
 };
 const updateUserById = async(req,res)=>{
     try{
-            const user = await userModel.findByIdAndUpdate(
+        if(req.user.id !== req.params.id && req.user.role !== "admin"){
+            return res.status(403).json({ message: "access denied" });
+        }
+        
+        // Prevent non-admin users from updating their role
+        if(req.user.role !== "admin" && req.body.role) {
+            return res.status(403).json({ message: "you are not allowed to update your role" });
+        }
+
+        const user = await userModel.findByIdAndUpdate(
             req.params.id,
             req.body,
             { new: true, runValidators: true }
@@ -92,6 +115,9 @@ const updateUserById = async(req,res)=>{
 };
 const deleteUserById = async (req, res) => {
     try {
+        if(req.user.id !== req.params.id && req.user.role !== "admin"){
+            return res.status(403).json({ message: "access denied" });
+        }
         const user = await userModel.findByIdAndDelete(req.params.id);
  
         if (!user) {

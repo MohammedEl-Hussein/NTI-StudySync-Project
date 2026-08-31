@@ -1,30 +1,33 @@
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors")
 const mongoose = require("mongoose");
 const app = express();
 
 const port = process.env.PORT
 
+app.use(cors({origin:"http://localhost:4200"}))
 app.use(express.json());
 
 const userRoutes = require("./routes/users");
 const categoryRoutes = require("./routes/categories");
-// const chatRoutes = require("./routes/chats");
-// const messageRoutes = require("./routes/messages");
- const progressRoutes = require("./routes/progresses");
+const chatRoutes = require("./routes/chats");
+const messageRoutes = require("./routes/messages");
+const progressRoutes = require("./routes/progresses");
 const roomMemberRoutes = require("./routes/roomMembers");
 const roomRoutes = require("./routes/rooms");
-// const supportMessageRoutes = require("./routes/supportMessages");
+const supportMessageRoutes = require("./routes/supportMessages");
 const taskCompletionRoutes = require("./routes/taskCompletion");
 const taskRoutes = require("./routes/tasks");
+
 app.use("/users", userRoutes);
 app.use("/categories", categoryRoutes);
-// app.use("/chats", chatRoutes);
-// app.use("/messages", messageRoutes);
- app.use("/progresses", progressRoutes);
+app.use("/chats", chatRoutes);
+app.use("/messages", messageRoutes);
+app.use("/progresses", progressRoutes);
 app.use("/room-members", roomMemberRoutes);
 app.use("/rooms", roomRoutes);
-// app.use("/support-messages", supportMessageRoutes);
+app.use("/support-messages", supportMessageRoutes);
 app.use("/task-completion", taskCompletionRoutes);
 app.use("/tasks", taskRoutes);
 
