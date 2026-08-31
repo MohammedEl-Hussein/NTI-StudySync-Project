@@ -1,10 +1,12 @@
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors")
 const mongoose = require("mongoose");
 const app = express();
 
 const port = process.env.PORT
 
+app.use(cors({origin:"http://localhost:4200"}))
 app.use(express.json());
 
 const userRoutes = require("./routes/users");
@@ -17,6 +19,7 @@ const roomRoutes = require("./routes/rooms");
 const supportMessageRoutes = require("./routes/supportMessages");
 const taskCompletionRoutes = require("./routes/taskCompletion");
 const taskRoutes = require("./routes/tasks");
+
 app.use("/users", userRoutes);
 app.use("/categories", categoryRoutes);
 app.use("/chats", chatRoutes);
