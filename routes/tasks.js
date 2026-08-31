@@ -1,44 +1,27 @@
 const express = require("express");
-
+const router = express.Router();
 const auth = require("../auth/auth");
-
 const {
   createTask,
   updateTask,
+  reorderTask,
   deleteTask,
   getAllTasks,
   getTasksBySection,
   getTasksByTitle,
   getTaskById
-
 } = require("../controllers/tasks");
 
-const router = express.Router();
-
+// admin , owner only
 router.post("/createtask", auth, createTask);
-
 router.put("/updatetask/:id", auth, updateTask);
-
+router.put("/reordertask/:id", auth, reorderTask);
 router.delete("/deletetask/:id", auth, deleteTask);
 
-router.get("/getalltask/:roomId", auth, getAllTasks);
-
-router.get(
-  "/gettasksbysection/:roomId/:section",
-  auth,
-  getTasksBySection
-);
-
-router.get(
-  "/gettaskbytitle/:roomId/:title",
-  auth,
-  getTasksByTitle
-);
-
-router.get(
-  "/gettaskbyid/:id",
-  auth,
-  getTaskById
-);
+//admin , owner and users
+router.get("/getalltasks/:roomId",getAllTasks);
+router.get("/gettaskbysection/:roomId/:section",getTasksBySection);
+router.get("/gettaskbytitle/:roomId/:title",getTasksByTitle);
+router.get("/gettaskbyid/:id",getTaskById);
 
 module.exports = router;

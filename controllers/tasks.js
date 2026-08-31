@@ -1,122 +1,40 @@
+const mongoose = require("mongoose");
+
 const taskModel = require("../models/tasks");
 const taskCompletionModel = require("../models/taskCompletion");
 const roomModel = require("../models/rooms");
-
-//support function to check if the user can manage tasks in the room
-const canManageRoom = (room, userId) => {
-  const isOwner = room.ownerId && room.ownerId.toString() === userId.toString();
-  const isAdmin =
-    Array.isArray(room.adminIds) &&
-    room.adminIds.some(
-      (adminId) => adminId.toString() === userId.toString()
-    );
-
-  return isOwner || isAdmin;
-};
+const Progress = require("../models/progresses");
 
 //create task
 const createTask = async (req, res) => {
-  try {
-    const {
-      roomId,
-      section,
-      title,
-      description,
-      dueDate
-    } = req.body;
+  const session = await mongoose.startSession();
 
-    // Validate required fields
+  try {
+    const { roomId, section, title, description, dueDate } = req.body;
+
     if (!roomId || !section || !title) {
       return res.status(400).json({
         message: "roomId, section and title are required"
       });
     }
 
-    // Find room
-    const checkRoom = await roomModel.findById(roomId);
-
-    if (!checkRoom)
-      return res.status(404).json({message: "Room not found"});
-      
-
-    // Get current user from JWT
     const userId = req.user?.userId;
-
-    if (!userId) 
-      return res.status(401).json({ message: "User ID not found in token"});
-    
-    // Room Owner
-    const isOwner = checkRoom.ownerId && String(checkRoom.ownerId) === String(userId);
-
-    // Room Admin
-    const isRoomAdmin =
-      Array.isArray(checkRoom.adminIds) &&
-      checkRoom.adminIds.some(
-        (adminId) => String(adminId) === String(userId)
-      );
-
-    // Platform Admin
-    const isPlatformAdmin = req.user.role === "admin";
-
-    // User must be one of them
-    if (!isOwner && !isRoomAdmin && !isPlatformAdmin) 
-      return res.status(403).json({message: "You are not allowed to manage tasks in this room"});
-
-    const checkTask = await taskModel.findOne({roomId,title: title.trim()});
-
-    if (checkTask) 
-      return res.status(400).json({message: "This task already exists in this room"});
-    
-    const lastTask = await taskModel.findOne({ roomId }).sort({ order: -1 });
-     const newOrder = lastTask ? lastTask.order + 1 : 1;
-
-    const createdTask = await taskModel.create({
-      roomId,
-      section: section.trim(),
-      title: title.trim(),
-      description,
-      order: newOrder,
-      dueDate
-    });
-
-    return res.status(201).json({message: "Task created successfully",data: createdTask});
-
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({message: err.message});
-  }
-};
-
-// roomId cannot be changed
-
-const updateTask = async (req, res) => {
-  try {
-    const taskId = req.params.id;
-
-    // Find task
-    const task = await taskModel.findById(taskId);
-
-    if (!task) {
-      return res.status(404).json({
-        message: "Task not found",
-      });
-    }
-
-    // Find room
-    const room = await roomModel.findById(task.roomId);
-
-    if (!room) {
-      return res.status(404).json({
-        message: "Room not found",
-      });
-    }
-
-    // Current user
-    const userId = req.user.userId;
 
     if (!userId) {
       return res.status(401).json({
-        message: "User ID not found in token",
+        message: "User ID not found in token"
+      });
+    }
+
+    session.startTransaction();
+
+    const room = await roomModel.findById(roomId).session(session);
+
+    if (!room) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        message: "Room not found"
       });
     }
 
@@ -134,182 +52,604 @@ const updateTask = async (req, res) => {
     const isPlatformAdmin = req.user.role === "admin";
 
     if (!isOwner && !isRoomAdmin && !isPlatformAdmin) {
+      await session.abortTransaction();
+
       return res.status(403).json({
-        message: "You are not allowed to manage tasks in this room",
+        message: "You are not allowed to manage tasks in this room"
       });
     }
 
-    // Get update data
-    const {
-      section,
-      title,
-      description,
-      dueDate,
-    } = req.body;
+    const cleanSection = section.trim();
+    const cleanTitle = title.trim();
 
+    if (!cleanSection || !cleanTitle) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        message: "Section and title cannot be empty"
+      });
+    }
+
+    // Check duplicate task
+    const existingTask = await taskModel.findOne({
+      roomId,
+      section: cleanSection,
+      title: cleanTitle
+    }).session(session);
+
+    if (existingTask) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        message: "This task already exists in this section"
+      });
+    }
+
+    // Get last order
+    const lastTask = await taskModel
+      .findOne({ roomId })
+      .sort({ order: -1 })
+      .session(session);
+
+    const newOrder = lastTask
+      ? lastTask.order + 1
+      : 1;
+
+    // Create task
+    const createdTask = await taskModel.create(
+      [
+        {
+          roomId,
+          section: cleanSection,
+          title: cleanTitle,
+          description,
+          order: newOrder,
+          dueDate
+        }
+      ],
+      { session }
+    );
+
+    // Update Progress for ALL users in this room
+    const progresses = await Progress.find({
+      roomId
+    }).session(session);
+
+    for (const progress of progresses) {
+      progress.totalTasks += 1;
+
+      progress.percentage =
+        progress.totalTasks > 0
+          ? Number(
+              (
+                (progress.completedTasks /
+                  progress.totalTasks) *
+                100
+              ).toFixed(2)
+            )
+          : 0;
+
+      await progress.save({ session });
+    }
+
+    await session.commitTransaction();
+
+    return res.status(201).json({
+      message: "Task created successfully",
+      data: createdTask[0]
+    });
+
+  } catch (error) {
+
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.error(error);
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: "Duplicate task data"
+      });
+    }
+
+    return res.status(500).json({
+      message: "Error creating task",
+      error: error.message
+    });
+
+  } finally {
+    await session.endSession();
+  }
+};
+
+//updateTask
+const updateTask = async (req, res) => {
+  try {
+
+    const taskId = req.params.id;
+
+    // Find task
+    const task = await taskModel.findById(taskId);
+    if (!task) 
+      return res.status(404).json({message: "Task not found"});
+    
+    // Find room
+    const room = await roomModel.findById(task.roomId);
+    if (!room) 
+      return res.status(404).json({message: "Room not found"});
+    
+    // Current user
+    const userId = req.user?.userId;
+    if (!userId) 
+      return res.status(401).json({message: "User ID not found in token"});
+
+    // Permissions
+    const isOwner = room.ownerId && String(room.ownerId) === String(userId);
+    const isRoomAdmin =
+      Array.isArray(room.adminIds) &&
+      room.adminIds.some(
+        (adminId) => String(adminId) === String(userId)
+      );
+    const isPlatformAdmin = req.user.role === "admin";
+    if (!isOwner && !isRoomAdmin && !isPlatformAdmin) 
+      return res.status(403).json({message:"You are not allowed to manage tasks in this room"});
+
+    // we can not change room id 
+    // we can not update order here
+    const { section, title, description, dueDate} = req.body;
     const updateData = {};
 
-    if (section !== undefined) {
+    if (section !== undefined) 
       updateData.section = section.trim();
-    }
 
-    if (title !== undefined) {
+    if (title !== undefined) 
       updateData.title = title.trim();
-    }
 
-    if (description !== undefined) {
+    if (description !== undefined) 
       updateData.description = description;
-    }
 
-    if (dueDate !== undefined) {
+    if (dueDate !== undefined) 
       updateData.dueDate = dueDate;
+
+    const newSection =section !== undefined? section.trim(): task.section;
+    const newTitle =title !== undefined ? title.trim() : task.title;
+
+    if ( section !== undefined || title !== undefined){
+      const existingTask = await taskModel.findOne({ roomId: task.roomId, section: newSection, title: newTitle, _id: {$ne: taskId }});
+
+      if (existingTask) 
+        return res.status(400).json({message:"A task with this title already exists in this section"});
     }
 
-    // Check duplicate title
-    if (title !== undefined) {
-      const existingTask = await taskModel.findOne({
-        roomId: task.roomId,
-        title: title.trim(),
-        _id: { $ne: taskId },
-      });
 
-      if (existingTask) {
-        return res.status(400).json({
-          message: "A task with this title already exists in this room",
-        });
+    // Update task
+
+    const updatedTask =
+      await taskModel.findByIdAndUpdate(taskId,updateData,{new: true, runValidators: true});
+
+    return res.status(200).json({message: "Task updated successfully",data: updatedTask});
+
+  } catch (err) {
+     console.error(err);
+
+    // MongoDB duplicate index
+    if (err.code === 11000) 
+    return res.status(400).json({message: "Duplicate task data"});
+    
+    return res.status(500).json({message: err.message});
+  }
+};
+
+// reorder tasks  ex: task from order 3 to order 1 
+
+const reorderTask = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const taskId = req.params.id;
+    const { newOrder } = req.body;
+    const userId = req.user?.userId;
+
+    if (
+      newOrder === undefined ||
+      !Number.isInteger(newOrder) ||
+      newOrder < 1
+    ) {
+      return res.status(400).json({
+        message: "newOrder must be a positive integer"
+      });
+    }
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "User ID not found in token"
+      });
+    }
+
+    session.startTransaction();
+
+    const task = await taskModel
+      .findById(taskId)
+      .session(session);
+
+    if (!task) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        message: "Task not found"
+      });
+    }
+
+    const room = await roomModel
+      .findById(task.roomId)
+      .session(session);
+
+    if (!room) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        message: "Room not found"
+      });
+    }
+
+    // Permissions
+    const isOwner =
+      room.ownerId &&
+      String(room.ownerId) === String(userId);
+
+    const isRoomAdmin =
+      Array.isArray(room.adminIds) &&
+      room.adminIds.some(
+        (adminId) => String(adminId) === String(userId)
+      );
+
+    const isPlatformAdmin = req.user.role === "admin";
+
+    if (!isOwner && !isRoomAdmin && !isPlatformAdmin) {
+      await session.abortTransaction();
+
+      return res.status(403).json({
+        message: "You are not allowed to manage tasks in this room"
+      });
+    }
+
+    const totalTasks = await taskModel
+      .countDocuments({
+        roomId: task.roomId
+      })
+      .session(session);
+
+    if (newOrder > totalTasks) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        message: `newOrder must be between 1 and ${totalTasks}`
+      });
+    }
+
+    if (newOrder === task.order) {
+      await session.abortTransaction();
+
+      return res.status(200).json({
+        message: "Task order is already correct",
+        data: task
+      });
+    }
+
+    const oldOrder = task.order;
+
+    //Move current task temporarily outside the normal range to avoid unique index conflicts.
+    await taskModel.updateOne(
+      { _id: taskId },
+      {
+        $set: {
+          order: -(oldOrder)
+        }
+      },
+      { session }
+    );
+
+    //Shift other tasks.
+    if (newOrder > oldOrder) {
+
+      await taskModel.updateMany(
+        {
+          roomId: task.roomId,
+          order: {
+            $gt: oldOrder,
+            $lte: newOrder
+          }
+        },
+        {
+          $inc: {
+            order: -1
+          }
+        },
+        { session }
+      );
+
+    } else {
+
+      await taskModel.updateMany(
+        {
+          roomId: task.roomId,
+          order: {
+            $gte: newOrder,
+            $lt: oldOrder
+          }
+        },
+        {
+          $inc: {
+            order: 1
+          }
+        },
+        { session }
+      );
+    }
+
+    //Put moved task in its new position.
+    await taskModel.updateOne(
+      { _id: taskId },
+      {
+        $set: {
+          order: newOrder
+        }
+      },
+      { session }
+    );
+
+    const updatedTask = await taskModel
+      .findById(taskId)
+      .session(session);
+
+    await session.commitTransaction();
+
+    return res.status(200).json({
+      message: "Task reordered successfully",
+      data: updatedTask
+    });
+
+  } catch (error) {
+
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Error reordering task",
+      error: error.message
+    });
+
+  } finally {
+    await session.endSession();
+  }
+};
+
+//delete task
+const deleteTask = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const taskId = req.params.id;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "User ID not found in token"
+      });
+    }
+
+    session.startTransaction();
+
+    const task = await taskModel
+      .findById(taskId)
+      .session(session);
+
+    if (!task) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        message: "Task not found"
+      });
+    }
+
+    const room = await roomModel
+      .findById(task.roomId)
+      .session(session);
+
+    if (!room) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        message: "Room not found"
+      });
+    }
+
+    // Permissions
+    const isOwner =
+      room.ownerId &&
+      String(room.ownerId) === String(userId);
+
+    const isRoomAdmin =
+      Array.isArray(room.adminIds) &&
+      room.adminIds.some(
+        (adminId) => String(adminId) === String(userId)
+      );
+
+    const isPlatformAdmin = req.user.role === "admin";
+
+    if (!isOwner && !isRoomAdmin && !isPlatformAdmin) {
+      await session.abortTransaction();
+
+      return res.status(403).json({
+        message: "You are not allowed to manage tasks in this room"
+      });
+    }
+
+    // Find users who completed this task
+    const completions = await taskCompletionModel
+      .find({ taskId })
+      .session(session);
+
+    // Delete completions
+    await taskCompletionModel.deleteMany(
+      { taskId },
+      { session }
+    );
+
+    // Update Progress
+    for (const completion of completions) {
+
+      const progress = await Progress.findOne({
+        userId: completion.userId,
+        roomId: task.roomId
+      }).session(session);
+
+      if (progress) {
+
+        if (progress.completedTasks > 0) {
+          progress.completedTasks -= 1;
+        }
+
+        if (progress.totalTasks > 0) {
+          progress.totalTasks -= 1;
+        }
+
+        progress.percentage =
+          progress.totalTasks > 0
+            ? Number(
+                (
+                  (progress.completedTasks /
+                    progress.totalTasks) *
+                  100
+                ).toFixed(2)
+              )
+            : 0;
+
+        await progress.save({ session });
       }
     }
 
-    // Update task
-    const updatedTask = await taskModel.findByIdAndUpdate(
-      taskId,
-      updateData,
+    // Users who did NOT complete the task
+    // still need totalTasks decreased
+    const completedUserIds = completions.map(
+      (completion) => completion.userId.toString()
+    );
+
+    await Progress.updateMany(
       {
-        new: true,
-        runValidators: true,
+        roomId: task.roomId,
+        userId: {
+          $nin: completions.map(
+            (completion) => completion.userId
+          )
+        },
+        totalTasks: {
+          $gt: 0
+        }
+      },
+      {
+        $inc: {
+          totalTasks: -1
+        }
+      },
+      {
+        session
       }
     );
 
-    return res.status(200).json({
-      message: "Task updated successfully",
-      data: updatedTask,
-    });
+    // Recalculate percentage for users who did NOT complete task
+    const remainingProgresses = await Progress.find({
+      roomId: task.roomId,
+      userId: {
+        $nin: completions.map(
+          (completion) => completion.userId
+        )
+      }
+    }).session(session);
 
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({message: err.message});
-  }
-};
+    for (const progress of remainingProgresses) {
 
-const deleteTask = async (req, res) => {
-  try {
-    const taskId = req.params.id;
+      progress.percentage =
+        progress.totalTasks > 0
+          ? Number(
+              (
+                (progress.completedTasks /
+                  progress.totalTasks) *
+                100
+              ).toFixed(2)
+            )
+          : 0;
 
-    // Find task
-    const task = await taskModel.findById(taskId);
-
-    if (!task) {
-      return res.status(404).json({
-        message: "Task not found",
-      });
+      await progress.save({ session });
     }
-
-    // Find room
-    const room = await roomModel.findById(task.roomId);
-
-    if (!room) {
-      return res.status(404).json({
-        message: "Room not found",
-      });
-    }
-
-    // Current user
-    const userId = req.user.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        message: "User ID not found in token",
-      });
-    }
-
-    // Check permissions
-    const isOwner =
-      room.ownerId &&
-      String(room.ownerId) === String(userId);
-
-    const isRoomAdmin =
-      Array.isArray(room.adminIds) &&
-      room.adminIds.some(
-        (adminId) => String(adminId) === String(userId)
-      );
-
-    const isPlatformAdmin = req.user.role === "admin";
-
-    if (!isOwner && !isRoomAdmin && !isPlatformAdmin) {
-      return res.status(403).json({
-        message: "You are not allowed to manage tasks in this room",
-      });
-    }
-
-    // Delete all completions related to this task
-    const deletedCompletions =
-      await taskCompletionModel.deleteMany({
-        taskId: taskId,
-      });
 
     // Delete task
-    await taskModel.findByIdAndDelete(taskId);
+    await taskModel.findByIdAndDelete(
+      taskId,
+      { session }
+    );
 
-    // Shift orders
+    // Fix task order
     await taskModel.updateMany(
       {
         roomId: task.roomId,
         order: {
-          $gt: task.order,
-        },
+          $gt: task.order
+        }
       },
       {
         $inc: {
-          order: -1,
-        },
+          order: -1
+        }
+      },
+      {
+        session
       }
     );
+
+    await session.commitTransaction();
 
     return res.status(200).json({
       message: "Task deleted successfully",
       data: task,
-      deletedCompletions: deletedCompletions.deletedCount,
+      deletedCompletions: completions.length
     });
 
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({message: err.message});
+  } catch (error) {
+
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Error deleting task",
+      error: error.message
+    });
+
+  } finally {
+    await session.endSession();
   }
 };
 
+//getAllTasks
 const getAllTasks = async (req, res) => {
   try {
     const { roomId } = req.params;
 
+    // Check room
     const room = await roomModel.findById(roomId);
+    if (!room) 
+      return res.status(404).json({message: "Room not found"});
 
-    if (!room) {
-      return res.status(404).json({
-        message: "Room not found"
-      });
-    }
-
-    const foundTasks = await taskModel
-      .find({ roomId })
-      .sort({
-        section: 1,
-        order: 1
-      });
-
-    return res.status(200).json({
-      message: "All tasks retrieved successfully",
-      data: foundTasks
-    });
+    // Get tasks by order
+    const foundTasks = await taskModel.find({ roomId }).sort({ order: 1});
+    return res.status(200).json({message:"All tasks retrieved successfully",data: foundTasks});
 
   } catch (err) {
     console.error(err);
@@ -317,114 +657,78 @@ const getAllTasks = async (req, res) => {
   }
 };
 
+//getTasksBySection
 const getTasksBySection = async (req, res) => {
   try {
-    const {
-      roomId,
-      section
-    } = req.params;
+    const {roomId,section} = req.params;
 
-    const room = await roomModel.findById(roomId);
+    // Check room
+    const room =await roomModel.findById(roomId);
+    if (!room) 
+      return res.status(404).json({message: "Room not found"});
+    
+    // Get tasks
+    const foundTasks =await taskModel.find({roomId,section}).sort({order: 1 });
+    if (foundTasks.length === 0) 
+      return res.status(404).json({message:"No tasks found in this section"});
+    
+    return res.status(200).json({message:"Tasks retrieved successfully",data: foundTasks});
 
-    if (!room) {
-      return res.status(404).json({
-        message: "Room not found"
-      });
-    }
-
-    const foundTasks = await taskModel
-      .find({
-        roomId,
-        section
-      })
-      .sort({
-        order: 1
-      });
-
-    if (foundTasks.length === 0) {
-      return res.status(404).json({
-        message: "No tasks found in this section"
-      });
-    }
-
-    return res.status(200).json({
-      message: "Tasks retrieved successfully",
-      data: foundTasks
-    });
-
-  } catch (err) {
+   } catch (err) {
     console.error(err);
     return res.status(500).json({message: err.message});
   }
 };
 
+//getTasksByTitle
 const getTasksByTitle = async (req, res) => {
   try {
-    const {
-      roomId,
-      title
-    } = req.params;
 
-    const room = await roomModel.findById(roomId);
+    const {  roomId,  title} = req.params;
 
-    if (!room) {
-      return res.status(404).json({
-        message: "Room not found"
-      });
-    }
+    // Check room
+    const room =await roomModel.findById(roomId);
+    if (!room) 
+      return res.status(404).json({message: "Room not found"});
 
-    const foundTasks = await taskModel
-      .find({
-        roomId,
-        title: {
-          $regex: title,
-          $options: "i"
-        }
-      })
-      .sort({
-        order: 1
-      });
+    // Search tasks
+    const foundTasks = await taskModel.find(
+      {roomId,title: {$regex: title,$options: "i"}}).sort({order: 1});
 
-    if (foundTasks.length === 0) {
-      return res.status(404).json({
-        message:
-          "No tasks found with the given title in this room"
-      });
-    }
+    if (foundTasks.length === 0)
+      return res.status(404).json({message:"No tasks found with the given title in this room"});
 
-    return res.status(200).json({
-      message: "Tasks fetched successfully",
-      data: foundTasks
-    });
+    return res.status(200).json({message:"Tasks fetched successfully",data: foundTasks});
 
-  } catch (err) {
+   } catch (err) {
     console.error(err);
     return res.status(500).json({message: err.message});
   }
 };
 
-
+//getTaskById
 const getTaskById = async (req, res) => {
   try {
-    const task = await taskModel.findById(req.params.id);
 
+    const task =await taskModel.findById(req.params.id);
     if (!task) 
       return res.status(404).json({message: "Task not found"});
+    
+    return res.status(200).json({message:"Task fetched successfully",data: task});
 
-    return res.status(200).json({message: "Task fetched successfully",data: task});
-
-  } catch (err) {
+   } catch (err) {
     console.error(err);
     return res.status(500).json({message: err.message});
   }
 };
 
 module.exports = {
-  createTask,
-  updateTask,
-  deleteTask,
-  getAllTasks,
-  getTasksBySection,
-  getTasksByTitle,
-  getTaskById
+createTask,
+updateTask,
+reorderTask,
+deleteTask,
+getAllTasks,
+getTasksBySection,
+getTasksByTitle,
+getTaskById
 };

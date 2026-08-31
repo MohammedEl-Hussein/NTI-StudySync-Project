@@ -40,9 +40,9 @@ taskCompletionSchema.index({ userId: 1 });
 taskCompletionSchema.index({ roomId: 1 });
 taskCompletionSchema.index({ taskId: 1 });
 
-const taskCompletionModel = mongoose.model(
+const TaskCompletion = mongoose.model(
   "TaskCompletion",
   taskCompletionSchema
 );
 
-module.exports = taskCompletionModel;
+module.exports = TaskCompletion;
