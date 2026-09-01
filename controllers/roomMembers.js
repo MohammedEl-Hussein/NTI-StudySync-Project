@@ -3,7 +3,7 @@ const roomModel = require("../models/rooms");
 const userModel = require("../models/users");
 const progressModel = require("../models/progresses");
 const taskModel = require("../models/tasks");
-const taskCompletionModel = require("../models/taskCompletions");
+const taskCompletionModel = require("../models/taskCompletion");
 
 
 const joinRoom = async (req, res) => {
