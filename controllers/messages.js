@@ -1,4 +1,7 @@
 const Message = require("../models/messages");
+const Chat = require("../models/chats");
+const RoomMember = require("../models/roomMembers");
+const Room = require("../models/rooms");
 
 const createMessage = async (req, res) => {
   try {
@@ -9,6 +12,24 @@ const createMessage = async (req, res) => {
         message: "chatId and content are required",
       });
     }
+    const chat = await Chat.findById(chatId);
+
+if (!chat) {
+  return res.status(404).json({
+    message: "Chat not found",
+  });
+}
+
+const member = await RoomMember.findOne({
+  roomId: chat.roomId,
+  userId: req.user.id,
+});
+
+if (!member) {
+  return res.status(403).json({
+    message: "You are not a member of this room",
+  });
+}
 
     const newMessage = await Message.create({
       chatId,
@@ -31,6 +52,25 @@ const createMessage = async (req, res) => {
 const getMessagesByChat = async (req, res) => {
   try {
     const { chatId } = req.params;
+    const chat = await Chat.findById(chatId);
+
+if (!chat) {
+  return res.status(404).json({
+    message: "Chat not found",
+  });
+}
+
+const member = await RoomMember.findOne({
+  roomId: chat.roomId,
+  userId: req.user.id,
+});
+
+if (!member) {
+  return res.status(403).json({
+    message: "You are not a member of this room",
+  });
+}
+    
 
     const messages = await Message.find({ chatId })
       .populate("userId", "name email")
@@ -99,10 +139,44 @@ const deleteMessage = async (req, res) => {
         message: "Message not found",
       });
     }
-    //only the message owner can delete it
-    if (message.userId.toString() !== req.user.id) {
+
+    // Get the chat
+    const chat = await Chat.findById(message.chatId);
+
+    if (!chat) {
+      return res.status(404).json({
+        message: "Chat not found",
+      });
+    }
+
+    // Get the room
+    const room = await Room.findById(chat.roomId);
+
+    if (!room) {
+      return res.status(404).json({
+        message: "Room not found",
+      });
+    }
+
+    const userId = req.user.id;
+
+    // Check if current user is the message owner
+    const isMessageOwner =
+      message.userId.toString() === userId;
+
+    // Check if current user is the Room Owner
+    const isRoomOwner =
+      room.ownerId.toString() === userId;
+
+    // Check if current user is a Room Admin
+    const isRoomAdmin =
+      room.adminIds?.some(
+        (adminId) => adminId.toString() === userId
+      );
+
+    if (!isMessageOwner && !isRoomOwner && !isRoomAdmin) {
       return res.status(403).json({
-        message: "You can only delete your own message",
+        message: "You are not allowed to delete this message",
       });
     }
 
@@ -111,6 +185,7 @@ const deleteMessage = async (req, res) => {
     res.status(200).json({
       message: "Message deleted successfully",
     });
+
   } catch (error) {
     res.status(500).json({
       message: "Failed to delete message",

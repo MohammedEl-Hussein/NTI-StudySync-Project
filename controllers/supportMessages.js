@@ -51,6 +51,11 @@ const getMySupportMessages = async (req, res) => {
 // Admin gets all supportMessages
 const getAllSupportMessages = async (req, res) => {
   try {
+      if (req.user.role !== "admin") {
+  return res.status(403).json({
+    message: "Access denied. Admins only",
+  });
+}
     const messages = await SupportMessage.find()
       .populate("userId", "name email")
       .sort({ createdAt: -1 });
@@ -69,6 +74,11 @@ const getAllSupportMessages = async (req, res) => {
 
 const getSupportMessageById = async (req, res) => {
   try {
+     if (req.user.role !== "admin") {
+  return res.status(403).json({
+    message: "Access denied. Admins only",
+  });
+}
     const { id } = req.params;
 
     const supportMessage = await SupportMessage.findById(id)
@@ -94,6 +104,11 @@ const getSupportMessageById = async (req, res) => {
 // Admin updates status
 const updateSupportMessageStatus = async (req, res) => {
   try {
+     if (req.user.role !== "admin") {
+  return res.status(403).json({
+    message: "Access denied. Admins only",
+  });
+}
     const { id } = req.params;
     const { status } = req.body;
 
