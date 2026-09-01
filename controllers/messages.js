@@ -2,6 +2,7 @@ const Message = require("../models/messages");
 const Chat = require("../models/chats");
 const RoomMember = require("../models/roomMembers");
 const Room = require("../models/rooms");
+const Notification = require("../models/notifications");
 
 const createMessage = async (req, res) => {
   try {
