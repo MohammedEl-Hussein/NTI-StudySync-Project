@@ -2,6 +2,8 @@ const roomMemberModel = require("../models/roomMembers");
 const roomModel = require("../models/rooms");
 const userModel = require("../models/users");
 const progressModel = require("../models/progresses");
+const taskModel = require("../models/tasks");
+const taskCompletionModel = require("../models/taskCompletions");
 
 
 const joinRoom = async (req, res) => {
@@ -46,6 +48,15 @@ const joinRoom = async (req, res) => {
         const roomMember = await roomMemberModel.create({
             userId,
             roomId
+        });
+
+        // Create Progress for this user + room
+        await progressModel.create({
+            userId,
+            roomId,
+            completedTasks: 0,
+            totalTasks: await taskModel.countDocuments({ roomId }),
+            percentage: 0
         });
 
         return res.status(201).json({
@@ -110,7 +121,12 @@ const leaveRoom = async (req, res) => {
             });
         }
         
-        // Remove user's progress for this room
+        // Remove user's progress and tasks completions for this room
+        await taskCompletionModel.deleteMany({
+            userId,
+            roomId
+        });
+
         await progressModel.findOneAndDelete({
             userId,
             roomId
@@ -186,6 +202,15 @@ const addMember = async (req, res) => {
         const roomMember = await roomMemberModel.create({
             userId,
             roomId
+        });
+
+        // Create Progress
+        await progressModel.create({
+            userId,
+            roomId,
+            completedTasks: 0,
+            totalTasks: await taskModel.countDocuments({ roomId }),
+            percentage: 0
         });
         return res.status(201).json({
             message: "Member added successfully",
