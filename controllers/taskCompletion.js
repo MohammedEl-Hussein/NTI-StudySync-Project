@@ -11,7 +11,8 @@ const completeTask = async (req, res) => {
 
     try {
 
-        const userId = req.user.userId;
+        const userId = req.user?.id || req.user?.userId || req.user?._id;
+        if (!userId) return res.status(401).json({ message: "User ID not found in token" });
         const { taskId } = req.body;
 
         if (!taskId)
@@ -86,7 +87,8 @@ const unCompletedTask = async (req, res) => {
 
     try {
 
-        const userId = req.user.userId;
+        const userId = req.user?.id || req.user?.userId || req.user?._id;
+        if (!userId) return res.status(401).json({ message: "User ID not found in token" });
         const { taskId } = req.body;
 
         // Validate taskId
@@ -161,7 +163,8 @@ const unCompletedTask = async (req, res) => {
 const getCompletedTasksByUser = async (req, res) => {
 
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.id || req.user?.userId || req.user?._id;
+        if (!userId) return res.status(401).json({ message: "User ID not found in token" });
 
         const completed =
             await taskCompletionModel.find({userId}).populate("taskId").sort({completedAt: -1});

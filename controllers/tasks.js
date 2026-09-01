@@ -18,7 +18,7 @@ const createTask = async (req, res) => {
       });
     }
 
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.userId || req.user?._id;
 
     if (!userId) {
       return res.status(401).json({
@@ -180,7 +180,7 @@ const updateTask = async (req, res) => {
       return res.status(404).json({message: "Room not found"});
     
     // Current user
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.userId || req.user?._id;
     if (!userId) 
       return res.status(401).json({message: "User ID not found in token"});
 
@@ -249,7 +249,7 @@ const reorderTask = async (req, res) => {
   try {
     const taskId = req.params.id;
     const { newOrder } = req.body;
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.userId || req.user?._id;
 
     if (
       newOrder === undefined ||
@@ -434,7 +434,7 @@ const deleteTask = async (req, res) => {
 
   try {
     const taskId = req.params.id;
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.userId || req.user?._id;
 
     if (!userId) {
       return res.status(401).json({
