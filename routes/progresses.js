@@ -1,24 +1,20 @@
 const express = require("express");
-const auth = require("../auth/auth");
 
 const {
-  createProgress,
-  getAllProgresses,
-  getUserRoomProgress,
-  updateProgress,
-  deleteProgress
+    createProgress,
+    getAllProgresses,
+    getUserRoomProgress
 } = require("../controllers/progresses");
 
 const router = express.Router();
 
-router.post("/", auth, createProgress);
+// Create progress when user joins a room
+router.post("/", createProgress);
 
-router.get("/", auth, getAllProgresses);
+// Get all progress of current user
+router.get("/", getAllProgresses);
 
-router.get("/room/:roomId", auth, getUserRoomProgress);
-
-router.put("/:id", auth, updateProgress);
-
-router.delete("/:id", auth, deleteProgress);
+// Get current user's progress in a specific room
+router.get("/room/:roomId",getUserRoomProgress);
 
 module.exports = router;

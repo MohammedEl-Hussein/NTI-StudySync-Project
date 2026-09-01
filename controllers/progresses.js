@@ -1,220 +1,180 @@
 const Progress = require("../models/progresses");
+const Task = require("../models/tasks");
 
+// This should be called when a user joins a room
 const createProgress = async (req, res) => {
+
     try {
-        const userId = req.user.id || req.user._id;
-        const { roomId, completedTasks, totalTasks } = req.body;
 
-        if (!userId) {
-            return res.status(401).json({
-                message: "Invalid user information"
-            });
-        }
+        const userId = req.user.userId;
+        const { roomId } = req.body;
 
-        if (!roomId) {
-            return res.status(400).json({
-                message: "roomId is required"
-            });
-        }
+        if (!userId) 
+            return res.status(401).json({message: "User not authenticated"});
 
-        if (completedTasks === undefined || totalTasks === undefined) {
-            return res.status(400).json({
-                message: "completedTasks and totalTasks are required"
-            });
-        }
+        if (!roomId) 
+            return res.status(400).json({message: "roomId is required"});
+        
+        // Check if progress already exists
+        const existingProgress =
+            await Progress.findOne({userId,roomId});
 
-        if (completedTasks < 0 || totalTasks < 0) {
-            return res.status(400).json({
-                message: "Task numbers cannot be negative"
-            });
-        }
+        if (existingProgress) 
+            return res.status(400).json({message:"Progress already exists for this user in this room"});
 
-        if (completedTasks > totalTasks) {
-            return res.status(400).json({
-                message: "completedTasks cannot be greater than totalTasks"
-            });
-        }
+        // Count room tasks
+        const totalTasks =
+            await Task.countDocuments({roomId});
 
-        const existingProgress = await Progress.findOne({
-            userId,
-            roomId
-        });
-
-        if (existingProgress) {
-            return res.status(400).json({
-                message: "Progress already exists for this user in this room"
-            });
-        }
-
-        const percentage =
-            totalTasks > 0
-                ? (completedTasks / totalTasks) * 100
-                : 0;
-
-        const progress = await Progress.create({
+        // Create progress
+        const progress =
+            await Progress.create({
             userId,
             roomId,
-            completedTasks,
+            completedTasks: 0,
             totalTasks,
-            percentage
+            percentage: 0
         });
 
-        res.status(201).json({
-            message: "Progress created successfully",
-            progress
-        });
-
+        return res.status(201).json({message:"Progress created successfully",data: progress});
+    
     } catch (error) {
-        res.status(500).json({
-            message: "Error creating progress",
-            error: error.message
-        });
+
+        console.error(error);
+        return res.status(500).json({message:"Error creating progress",error: error.message});
     }
 };
-
 
 const getAllProgresses = async (req, res) => {
+
     try {
-        const userId = req.user.id || req.user._id;
 
-        const progresses = await Progress.find({ userId });
+        const userId = req.user.userId;
 
-        res.status(200).json(progresses);
+        const progresses =
+            await Progress.find({userId}).populate("roomId");
 
+        return res.status(200).json({message:"Progresses retrieved successfully",data: progresses});
     } catch (error) {
-        res.status(500).json({
-            message: "Error getting progresses",
-            error: error.message
-        });
+
+        console.error(error);
+
+        return res.status(500).json({message:"Error getting progresses",error: error.message});
     }
 };
-
 
 const getUserRoomProgress = async (req, res) => {
+
     try {
-        const userId = req.user.id || req.user._id;
+
+        const userId = req.user.userId;
         const { roomId } = req.params;
 
-        const progress = await Progress.findOne({
-            userId,
-            roomId
-        });
 
-        if (!progress) {
-            return res.status(404).json({
-                message: "Progress not found"
-            });
-        }
+        if (!roomId) 
+            return res.status(400).json({message: "roomId is required"});
+        
+        const progress =await Progress.findOne({userId,roomId});
 
-        res.status(200).json(progress);
+        if (!progress) 
+            return res.status(404).json({message: "Progress not found"});
+        
+        return res.status(200).json({message:"Progress retrieved successfully",data: progress});
 
     } catch (error) {
-        res.status(500).json({
-            message: "Error getting progress",
-            error: error.message
-        });
+        console.error(error);
+        return res.status(500).json({message:"Error getting progress",error: error.message});
     }
 };
 
+// Call this when a new task is added to a room
+const increaseTotalTasks = async (roomId) => {
 
-const updateProgress = async (req, res) => {
     try {
-        const userId = req.user.id || req.user._id;
-        const { id } = req.params;
-        const { completedTasks, totalTasks } = req.body;
+        const progresses =
+            await Progress.find({roomId});
 
-        if (completedTasks === undefined || totalTasks === undefined) {
-            return res.status(400).json({
-                message: "completedTasks and totalTasks are required"
-            });
+        for (const progress of progresses) {
+
+            progress.totalTasks += 1;
+            
+            progress.percentage =
+                progress.totalTasks > 0
+                    ? Number(
+                        (
+                            (progress.completedTasks /
+                                progress.totalTasks) *
+                            100
+                        ).toFixed(2)
+                    )
+                    : 0;
+
+
+            await progress.save();
         }
-
-        if (completedTasks < 0 || totalTasks < 0) {
-            return res.status(400).json({
-                message: "Task numbers cannot be negative"
-            });
-        }
-
-        if (completedTasks > totalTasks) {
-            return res.status(400).json({
-                message: "completedTasks cannot be greater than totalTasks"
-            });
-        }
-
-        const percentage =
-            totalTasks > 0
-                ? (completedTasks / totalTasks) * 100
-                : 0;
-
-        const progress = await Progress.findOneAndUpdate(
-            {
-                _id: id,
-                userId
-            },
-            {
-                completedTasks,
-                totalTasks,
-                percentage
-            },
-            {
-                new: true,
-                runValidators: true
-            }
-        );
-
-        if (!progress) {
-            return res.status(404).json({
-                message: "Progress not found"
-            });
-        }
-
-        res.status(200).json({
-            message: "Progress updated successfully",
-            progress
-        });
+        return progresses;
 
     } catch (error) {
-        res.status(500).json({
-            message: "Error updating progress",
-            error: error.message
-        });
+        throw new Error(`Error increasing total tasks: ${error.message}`);
     }
 };
 
 
-const deleteProgress = async (req, res) => {
+
+// =====================================================
+// DECREASE TOTAL TASKS
+// =====================================================
+
+// Call this when a task is deleted
+//
+// IMPORTANT:
+// This function alone is not enough when deleting a task
+// because we must know which users completed that task.
+//
+// The actual task deletion logic should handle:
+// - deleting TaskCompletion
+// - decreasing completedTasks for affected users
+// - decreasing totalTasks for all users
+//
+// Therefore this helper should NOT be used alone for
+// deleting tasks.
+
+const decreaseTotalTasks = async (roomId) => {
+
     try {
-        const userId = req.user.id || req.user._id;
-        const { id } = req.params;
 
-        const progress = await Progress.findOneAndDelete({
-            _id: id,
-            userId
-        });
+        const progresses = await Progress.find({roomId});
 
-        if (!progress) {
-            return res.status(404).json({
-                message: "Progress not found"
-            });
+        for (const progress of progresses) {
+
+            if (progress.totalTasks > 0) 
+                progress.totalTasks -= 1;
+
+            progress.percentage =
+                progress.totalTasks > 0
+                    ? Number(
+                        (
+                            (progress.completedTasks /
+                                progress.totalTasks) *
+                            100
+                        ).toFixed(2)
+                    )
+                    : 0;
+
+            await progress.save();
         }
-
-        res.status(200).json({
-            message: "Progress deleted successfully"
-        });
+        return progresses;
 
     } catch (error) {
-        res.status(500).json({
-            message: "Error deleting progress",
-            error: error.message
-        });
+
+        throw new Error(`Error decreasing total tasks: ${error.message}`);
     }
 };
-
 
 module.exports = {
-    createProgress,
-    getAllProgresses,
-    getUserRoomProgress,
-    updateProgress,
-    deleteProgress
+createProgress,
+getAllProgresses,
+getUserRoomProgress,
+increaseTotalTasks,
+decreaseTotalTasks
 };
