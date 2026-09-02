@@ -38,6 +38,39 @@ if (!member) {
       content: content.trim(),
     });
 
+    
+    // --- NOTIFICATION LOGIC ---
+    try {
+      const io = req.app.get('io');
+      const connectedUsers = req.app.get('connectedUsers');
+      
+      // We already fetched chat and room above:
+      // const chat = await Chat.findById(chatId);
+      // We need room for the title:
+      const roomForNotif = await Room.findById(chat.roomId);
+      
+      if (io && connectedUsers && roomForNotif) {
+        const members = await RoomMember.find({ roomId: chat.roomId, userId: { $ne: req.user.id } });
+        for (const member of members) {
+          const notification = new Notification({
+            recipient: member.userId,
+            type: 'chat',
+            title: `New Message in ${roomForNotif.title}`,
+            message: `You have new unread messages in ${roomForNotif.title}`,
+            link: `/rooms/${chat.roomId}/chat`
+          });
+          await notification.save();
+          const socketId = connectedUsers.get(member.userId.toString());
+          if (socketId) {
+            io.to(socketId).emit('new_notification', notification);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error sending notification', err);
+    }
+    // --------------------------
+
     res.status(201).json({
       message: "Message sent successfully",
       data: newMessage,
