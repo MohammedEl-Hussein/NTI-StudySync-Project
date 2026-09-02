@@ -1,3 +1,4 @@
+const Room = require('../models/rooms');
 const Progress = require("../models/progresses");
 const Task = require("../models/tasks");
 
@@ -6,7 +7,7 @@ const createProgress = async (req, res) => {
 
     try {
 
-        const userId = req.user.userId;
+        const userId = (req.user?.id || req.user?.userId || req.user?._id);
         const { roomId } = req.body;
 
         if (!userId) 
@@ -46,40 +47,61 @@ const createProgress = async (req, res) => {
 };
 
 const getAllProgresses = async (req, res) => {
-
     try {
+        const userId = (req.user?.id || req.user?.userId || req.user?._id);
 
-        const userId = req.user.userId;
+        console.log("USER ID IN PROGRESSES IS:", userId); const progresses = await Progress.find({userId}).populate("roomId"); console.log("FOUND PROGRESSES COUNT:", progresses.length);
+        
+        // Dynamically calculate accurate progress
+        const Task = require("../models/tasks");
+        const TaskCompletion = require("../models/taskCompletion");
+        
+        const enhancedProgresses = [];
+        
+        for (let p of progresses) {
+            const pObj = p.toObject();
+            if (p.roomId) {
+                const roomId = p.roomId._id ? p.roomId._id.toString() : p.roomId.toString();
+                const totalTasks = await Task.countDocuments({ roomId });
+                const completedTasks = await TaskCompletion.countDocuments({ roomId, userId });
+                
+                pObj.totalTasks = totalTasks;
+                pObj.completedTasks = completedTasks;
+                pObj.percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            }
+            enhancedProgresses.push(pObj);
+        }
 
-        const progresses =
-            await Progress.find({userId}).populate("roomId");
-
-        return res.status(200).json({message:"Progresses retrieved successfully",data: progresses});
+        return res.status(200).json({message:"Progresses retrieved successfully",data: enhancedProgresses});
     } catch (error) {
-
         console.error(error);
-
         return res.status(500).json({message:"Error getting progresses",error: error.message});
     }
 };
 
 const getUserRoomProgress = async (req, res) => {
-
     try {
-
-        const userId = req.user.userId;
+        const userId = (req.user?.id || req.user?.userId || req.user?._id);
         const { roomId } = req.params;
 
-
-        if (!roomId) 
-            return res.status(400).json({message: "roomId is required"});
+        if (!roomId) return res.status(400).json({message: "roomId is required"});
         
-        const progress =await Progress.findOne({userId,roomId});
-
-        if (!progress) 
-            return res.status(404).json({message: "Progress not found"});
+        const progress = await Progress.findOne({userId,roomId});
+        if (!progress) return res.status(404).json({message: "Progress not found"});
         
-        return res.status(200).json({message:"Progress retrieved successfully",data: progress});
+        // Dynamically calculate accurate progress
+        const Task = require("../models/tasks");
+        const TaskCompletion = require("../models/taskCompletion");
+        
+        const pObj = progress.toObject();
+        const totalTasks = await Task.countDocuments({ roomId });
+        const completedTasks = await TaskCompletion.countDocuments({ roomId, userId });
+        
+        pObj.totalTasks = totalTasks;
+        pObj.completedTasks = completedTasks;
+        pObj.percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        
+        return res.status(200).json({message:"Progress retrieved successfully",data: pObj});
 
     } catch (error) {
         console.error(error);
@@ -178,3 +200,7 @@ getUserRoomProgress,
 increaseTotalTasks,
 decreaseTotalTasks
 };
+
+
+
+

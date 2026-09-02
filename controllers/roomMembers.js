@@ -73,25 +73,43 @@ const joinRoom = async (req, res) => {
 const getRoomMembers = async (req, res) => {
     try {
         const { roomId } = req.params;
-        // Check if room exists
         const room = await roomModel.findById(roomId);
         if (!room) {
-            return res.status(404).json({
-                message: "Room not found"
-            });
+            return res.status(404).json({ message: "Room not found" });
         }
-        // Get all members
-        const members = await roomMemberModel
-            .find({ roomId })
-            .populate("userId", "name email studyLevel");
+        
+        const members = await roomMemberModel.find({ roomId }).populate("userId", "name email studyLevel");
+        
+        const totalTasks = await taskModel.countDocuments({ roomId });
+        const completions = await taskCompletionModel.find({ roomId });
+        
+        const membersWithProgress = members.map(m => { 
+            const mObj = m.toObject(); 
+            
+            // Handle cases where userId is null (e.g. deleted user account)
+            if (!mObj.userId || !mObj.userId._id) {
+                mObj.progress = 0;
+                return mObj;
+            }
+            
+            const memberId = mObj.userId._id.toString();
+            const userCompletions = completions.filter(c => c.userId.toString() === memberId).length;
+            
+            let percentage = 0;
+            if (totalTasks > 0) {
+                percentage = Math.round((userCompletions / totalTasks) * 100);
+            }
+            mObj.progress = percentage; 
+            return mObj; 
+        });
+        
         return res.status(200).json({
             message: "Room members retrieved successfully",
-            members
+            members: membersWithProgress
         });
     } catch (err) {
-        return res.status(500).json({
-            message: err.message
-        });
+        console.error("Error in getRoomMembers:", err);
+        return res.status(500).json({ message: err.message });
     }
 };
 const leaveRoom = async (req, res) => {
