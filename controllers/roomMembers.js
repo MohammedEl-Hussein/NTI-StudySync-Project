@@ -70,6 +70,7 @@ const joinRoom = async (req, res) => {
         });
     }
 };
+
 const getRoomMembers = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -112,6 +113,7 @@ const getRoomMembers = async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 };
+
 const leaveRoom = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -158,6 +160,7 @@ const leaveRoom = async (req, res) => {
         });
     }
 };
+
 const addMember = async (req, res) => {
     try {
         const { roomId } = req.params;
@@ -241,6 +244,7 @@ const addMember = async (req, res) => {
         });
     }
 };
+
 const removeMember = async (req, res) => {
     try {
         const { roomId, userId } = req.params;
@@ -273,22 +277,30 @@ const removeMember = async (req, res) => {
                 message: "Room owner cannot be removed"
             });
         }
+        
         // Find membership
         const roomMember = await roomMemberModel.findOneAndDelete({
             userId,
             roomId
         });
+        
         if (!roomMember) {
             return res.status(404).json({
                 message: "User is not a member of this room"
             });
         }
         
-        // Remove user's progress for this room
+        // Remove user's progress and tasks completions for this room
+        await taskCompletionModel.deleteMany({
+            userId,
+            roomId
+        });
+
         await progressModel.findOneAndDelete({
             userId,
             roomId
         });
+        
         return res.status(200).json({
             message: "Member removed successfully"
         });
@@ -298,7 +310,6 @@ const removeMember = async (req, res) => {
         });
     }
 };
-
 
 module.exports = {
     joinRoom,
