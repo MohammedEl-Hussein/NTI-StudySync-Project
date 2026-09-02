@@ -15,26 +15,29 @@ const createMessage = async (req, res) => {
     }
     const chat = await Chat.findById(chatId);
 
-if (!chat) {
-  return res.status(404).json({
-    message: "Chat not found",
-  });
-}
+    if (!chat) {
+      return res.status(404).json({
+        message: "Chat not found",
+      });
+    }
 
-const member = await RoomMember.findOne({
-  roomId: chat.roomId,
-  userId: req.user.id,
-});
+    const userId = req.user.id || req.user._id;
+    const isSuperAdmin = req.user.role === "admin";
 
-if (!member) {
-  return res.status(403).json({
-    message: "You are not a member of this room",
-  });
-}
+    const member = await RoomMember.findOne({
+      roomId: chat.roomId,
+      userId: userId,
+    });
+
+    if (!isSuperAdmin && !member) {
+      return res.status(403).json({
+        message: "You are not a member of this room",
+      });
+    }
 
     const newMessage = await Message.create({
       chatId,
-      userId: req.user.id,
+      userId: userId,
       content: content.trim(),
     });
 
@@ -50,7 +53,7 @@ if (!member) {
       const roomForNotif = await Room.findById(chat.roomId);
       
       if (io && connectedUsers && roomForNotif) {
-        const members = await RoomMember.find({ roomId: chat.roomId, userId: { $ne: req.user.id } });
+        const members = await RoomMember.find({ roomId: chat.roomId, userId: { $ne: userId } });
         for (const member of members) {
           const notification = new Notification({
             recipient: member.userId,
@@ -88,26 +91,28 @@ const getMessagesByChat = async (req, res) => {
     const { chatId } = req.params;
     const chat = await Chat.findById(chatId);
 
-if (!chat) {
-  return res.status(404).json({
-    message: "Chat not found",
-  });
-}
+    if (!chat) {
+      return res.status(404).json({
+        message: "Chat not found",
+      });
+    }
 
-const member = await RoomMember.findOne({
-  roomId: chat.roomId,
-  userId: req.user.id,
-});
+    const userId = req.user.id || req.user._id;
+    const isSuperAdmin = req.user.role === "admin";
 
-if (!member) {
-  return res.status(403).json({
-    message: "You are not a member of this room",
-  });
-}
-    
+    const member = await RoomMember.findOne({
+      roomId: chat.roomId,
+      userId: userId,
+    });
+
+    if (!isSuperAdmin && !member) {
+      return res.status(403).json({
+        message: "You are not a member of this room",
+      });
+    }
 
     const messages = await Message.find({ chatId })
-      .populate("userId", "name email")
+      .populate("userId", "name email role")
       .sort({ sentAt: 1 });
 
     res.status(200).json({
@@ -140,8 +145,12 @@ const updateMessage = async (req, res) => {
         message: "Message not found",
       });
     }
-    //only the message owner can edit it
-    if (message.userId.toString() !== req.user.id) {
+
+    const userId = (req.user.id || req.user._id)?.toString();
+    const isSuperAdmin = req.user.role === "admin";
+
+    // Only the message owner or Super Admin can edit it
+    if (!isSuperAdmin && message.userId.toString() !== userId) {
       return res.status(403).json({
         message: "You can only edit your own message",
       });
@@ -192,23 +201,26 @@ const deleteMessage = async (req, res) => {
       });
     }
 
-    const userId = req.user.id;
+    // 1. Safely extract user ID and super admin role
+    const userId = (req.user.id || req.user._id)?.toString();
+    const isSuperAdmin = req.user.role === "admin";
 
-    // Check if current user is the message owner
+    // 2. Permission checks
     const isMessageOwner =
-      message.userId.toString() === userId;
+      userId && message.userId?.toString() === userId;
 
-    // Check if current user is the Room Owner
     const isRoomOwner =
-      room.ownerId.toString() === userId;
+      userId && room.ownerId?.toString() === userId;
 
-    // Check if current user is a Room Admin
     const isRoomAdmin =
-      room.adminIds?.some(
-        (adminId) => adminId.toString() === userId
-      );
+      userId &&
+      room.adminIds?.some((adminId) => {
+        const aId = adminId._id || adminId.id || adminId;
+        return aId && aId.toString() === userId;
+      });
 
-    if (!isMessageOwner && !isRoomOwner && !isRoomAdmin) {
+    // Super Admins, Message Owners, Room Owners, and Room Admins can all delete messages
+    if (!isSuperAdmin && !isMessageOwner && !isRoomOwner && !isRoomAdmin) {
       return res.status(403).json({
         message: "You are not allowed to delete this message",
       });
