@@ -13,7 +13,7 @@ const port = process.env.PORT || 3000;
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:4200",
+    origin: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
@@ -42,7 +42,7 @@ app.set("io", io);
 app.set("connectedUsers", connectedUsers);
 
 // Middlewares
-app.use(cors({ origin: "http://localhost:4200" }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 // Routes
