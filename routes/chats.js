@@ -1,4 +1,5 @@
 const express = require("express");
+const auth = require("../auth/auth");
 
 const {
   createChat,
@@ -10,14 +11,10 @@ const {
 
 const router = express.Router();
 
-router.post("/", createChat);
-
-router.get("/", getAllChats);
-
-router.get("/room/:roomId", getChatByRoomId);
-
-router.get("/:id", getChatById);
-
-router.delete("/:id", deleteChat);
+router.post("/", auth, createChat);
+router.get("/", auth, getAllChats);
+router.get("/room/:roomId", auth, getChatByRoomId);
+router.get("/:id", auth, getChatById);
+router.delete("/:id", auth, deleteChat);
 
 module.exports = router;
