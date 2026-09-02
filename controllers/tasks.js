@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
 const taskModel = require("../models/tasks");
+const Notification = require("../models/notifications");
 const taskCompletionModel = require("../models/taskCompletion");
 const roomModel = require("../models/rooms");
 const Progress = require("../models/progresses");
@@ -133,6 +134,36 @@ const createTask = async (req, res) => {
     }
 
     await session.commitTransaction();
+
+    
+    // --- NOTIFICATION LOGIC ---
+    try {
+      const io = req.app.get('io');
+      const connectedUsers = req.app.get('connectedUsers');
+      
+      const roomForNotif = await require("../models/rooms").findById(roomId);
+      
+      if (io && connectedUsers && roomForNotif) {
+        const members = await require("../models/roomMembers").find({ roomId, userId: { $ne: req.user.id } });
+        for (const member of members) {
+          const notification = new Notification({
+            recipient: member.userId,
+            type: 'task',
+            title: `New Task in ${roomForNotif.title}`,
+            message: `A new task "${title}" was added to your room`,
+            link: `/rooms/${roomId}/study-plan`
+          });
+          await notification.save();
+          const socketId = connectedUsers.get(member.userId.toString());
+          if (socketId) {
+            io.to(socketId).emit('new_notification', notification);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error sending notification', err);
+    }
+    // --------------------------
 
     return res.status(201).json({
       message: "Task created successfully",
