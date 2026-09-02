@@ -55,14 +55,29 @@ const createMessage = async (req, res) => {
       if (io && connectedUsers && roomForNotif) {
         const members = await RoomMember.find({ roomId: chat.roomId, userId: { $ne: userId } });
         for (const member of members) {
-          const notification = new Notification({
+          let notification = await Notification.findOne({
             recipient: member.userId,
             type: 'chat',
-            title: `New Message in ${roomForNotif.title}`,
-            message: `You have new unread messages in ${roomForNotif.title}`,
-            link: `/rooms/${chat.roomId}/chat`
+            link: `/rooms/${chat.roomId}/chat`,
+            isRead: false
           });
-          await notification.save();
+
+          if (notification) {
+            const match = notification.message.match(/You have (\d+) new/);
+            let count = match ? parseInt(match[1]) + 1 : 2;
+            notification.message = `You have ${count} new unread messages in ${roomForNotif.title}`;
+            notification.createdAt = new Date();
+            await notification.save();
+          } else {
+            notification = new Notification({
+              recipient: member.userId,
+              type: 'chat',
+              title: `New Message in ${roomForNotif.title}`,
+              message: `You have 1 new unread message in ${roomForNotif.title}`,
+              link: `/rooms/${chat.roomId}/chat`
+            });
+            await notification.save();
+          }
           const socketId = connectedUsers.get(member.userId.toString());
           if (socketId) {
             io.to(socketId).emit('new_notification', notification);
